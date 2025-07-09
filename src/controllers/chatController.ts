@@ -22,12 +22,12 @@ export class ChatController {
         return;
       }
 
-      const response = await ChatService.analyzeMessage(user_id, message, glucoseContext);
+      const aiResponse = await ChatService.analyzeMessage(user_id, message, glucoseContext);
 
       res.json({
         success: true,
         data: {
-          response
+          response: aiResponse
         }
       });
     } catch (error) {

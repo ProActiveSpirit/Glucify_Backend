@@ -205,7 +205,7 @@ export class GlucoseController {
 
   static async getGlucoseAnalysis(req: Request, res: Response): Promise<void> {
     try {
-      const { user_id, timeframe, includeContext } = req.body;
+      const { user_id } = req.body;
 
       if (!user_id) {
         res.status(400).json({

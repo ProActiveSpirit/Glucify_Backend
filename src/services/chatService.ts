@@ -43,33 +43,26 @@ export class ChatService {
   static async analyzeMessage(
     userId: string,
     message: string,
-    glucoseContext?: any,
-    userProfile?: any
-  ): Promise<{ response: string; conversation?: ChatConversation }> {
+    glucoseContext?: any
+  ): Promise<string> {
     try {
       // Get AI response
       const aiResponse = await AIService.analyzeMessage({
         message,
-        glucoseContext,
-        userProfile
+        glucoseContext
       });
 
       // Log the conversation
-      const conversation = await this.logConversation({
+      await this.logConversation({
         user_id: userId,
         message,
         ai_response: aiResponse,
         glucose_context: glucoseContext
       });
 
-      return {
-        response: aiResponse,
-        ...(conversation && { conversation })
-      };
+      return aiResponse;
     } catch (error) {
-      return {
-        response: 'I apologize, but I\'m having trouble processing your request right now. Please try again later.'
-      };
+      return 'I apologize, but I\'m having trouble processing your request right now. Please try again later.';
     }
   }
 
@@ -87,7 +80,7 @@ export class ChatService {
     restrictions: string[],
     targetCarbs: number,
     diabetesType: 'type1' | 'type2'
-  ): Promise<string> {
+  ): Promise<{ mealPlan: string; recipes: any[] }> {
     try {
       return await AIService.generateMealPlan(
         preferences,
@@ -96,7 +89,10 @@ export class ChatService {
         diabetesType
       );
     } catch (error) {
-      return 'I apologize, but I\'m having trouble generating a meal plan right now. Please try again later.';
+      return {
+        mealPlan: 'I apologize, but I\'m having trouble generating a meal plan right now. Please try again later.',
+        recipes: []
+      };
     }
   }
 } 

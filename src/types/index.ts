@@ -10,10 +10,10 @@ export interface FoodItem {
   fiberPer100g?: number;
   glycemicIndex?: number;
   categories: string[];
-  imageUrl?: string;
-  recipeUrl?: string;
-  userRating?: number;
-  avgGlucoseImpact?: number;
+  imageUrl?: string | undefined;
+  recipeUrl?: string | undefined;
+  userRating?: number | undefined;
+  avgGlucoseImpact?: number | undefined;
   portionSize: number;
 }
 
@@ -87,9 +87,15 @@ export interface ChatConversation {
 export interface AIAnalysisRequest {
   message: string;
   glucoseContext?: {
-    currentGlucose?: number;
+    currentGlucose?: {
+      value: number;
+      trend?: string;
+    };
     recentReadings?: GlucoseReading[];
     targetRange?: [number, number];
+    recentFoodLogs?: any[];
+    currentMealPlan?: any;
+    userProfile?: any;
   };
 }
 
