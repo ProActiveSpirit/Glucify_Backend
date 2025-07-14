@@ -1,5 +1,3 @@
-import { Request } from 'express';
-
 // Food and Meal Types
 export interface FoodItem {
   id: string;
