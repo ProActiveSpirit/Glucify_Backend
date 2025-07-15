@@ -24,16 +24,64 @@ const PORT = process.env['PORT'] || 3001;
 // Security middleware
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration - Enhanced for development and production
 const allowedOrigins = process.env['ALLOWED_ORIGINS']?.split(',') || [
   'http://localhost:3000',
-  'http://localhost:8081'
+  'http://localhost:8081',
+  'http://localhost:19000',
+  'http://localhost:19006',
+  'https://glucify-app.vercel.app',
+  'https://glucify-frontend.vercel.app',
+  'exp://192.168.1.100:8081',
+  'exp://localhost:8081'
 ];
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+// For development, allow all origins
+const corsOptions = {
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // Allow all localhost origins for development
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      return callback(null, true);
+    }
+
+    // Allow Expo development origins
+    if (origin.includes('exp://')) {
+      return callback(null, true);
+    }
+
+    // Allow Vercel deployments
+    if (origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
+
+    // Check against allowed origins list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+
+    // Default for development: allow the request
+    if (process.env['NODE_ENV'] === 'development') {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
