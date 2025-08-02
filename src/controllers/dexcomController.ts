@@ -16,16 +16,10 @@ interface DexcomRefreshRequest {
   grant_type: 'refresh_token';
 }
 
-interface DexcomGlucoseRequest {
-  access_token: string;
-  start_date?: string;
-  end_date?: string;
-}
-
 export class DexcomController {
   private static getDexcomBaseUrl(): string {
     // Use sandbox for development, production for production
-    return process.env.NODE_ENV === 'production' 
+    return process.env['NODE_ENV'] === 'production'
       ? 'https://api.dexcom.com'
       : 'https://sandbox-api.dexcom.com';
   }

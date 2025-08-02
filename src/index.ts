@@ -15,6 +15,7 @@ import glucoseRoutes from './routes/glucose';
 import chatRoutes from './routes/chat';
 import foodAnalysisRoutes from './routes/foodAnalysis';
 import dexcomRoutes from './routes/dexcom';
+import paymentRoutes from './routes/payment';
 
 // Import middleware
 // Note: authenticateToken is used in route files
@@ -122,6 +123,7 @@ app.use('/api/glucose', glucoseRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/food-analysis', foodAnalysisRoutes);
 app.use('/api/dexcom', dexcomRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // Global error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
