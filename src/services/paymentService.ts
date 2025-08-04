@@ -159,7 +159,7 @@ export class PaymentService {
         status: 'trial',
         currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
         currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        trialEnd: new Date((subscription as any).trial_end! * 1000),
+        ...((subscription as any).trial_end && { trialEnd: new Date((subscription as any).trial_end * 1000) }),
         cancelAtPeriodEnd: false,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -202,7 +202,11 @@ export class PaymentService {
       }
 
       const stripeSubscription = stripeSubscriptions.data[0];
-      const plan = this.getPlan(stripeSubscription.metadata.planId || 'regular-plan')!;
+      if (!stripeSubscription) {
+        return null;
+      }
+
+      const plan = this.getPlan(stripeSubscription.metadata?.['planId'] || 'regular-plan')!;
 
       const userSubscription: UserSubscription = {
         id: stripeSubscription.id,
@@ -211,10 +215,10 @@ export class PaymentService {
         stripeSubscriptionId: stripeSubscription.id,
         planId: plan.id,
         status: stripeSubscription.status as any,
-        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-        trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined,
-        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+        currentPeriodStart: new Date((stripeSubscription as any).current_period_start * 1000),
+        currentPeriodEnd: new Date((stripeSubscription as any).current_period_end * 1000),
+        ...((stripeSubscription as any).trial_end && { trialEnd: new Date((stripeSubscription as any).trial_end * 1000) }),
+        cancelAtPeriodEnd: (stripeSubscription as any).cancel_at_period_end,
         createdAt: new Date(stripeSubscription.created * 1000),
         updatedAt: new Date()
       };
@@ -235,7 +239,7 @@ export class PaymentService {
         limit: 100
       });
 
-      return customers.data.find(customer => customer.metadata.userId === userId) || null;
+      return customers.data.find(customer => customer.metadata?.['userId'] === userId) || null;
     } catch (error) {
       console.error('Error finding customer:', error);
       return null;
@@ -269,16 +273,18 @@ export class PaymentService {
           }
 
           // Update subscription items
-          await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-            items: [{
-              id: stripeSubscription.items.data[0].id,
-              price: newPlan.stripePriceId,
-            }],
-            metadata: {
-              ...stripeSubscription.metadata,
-              planId: newPlan.id
-            }
-          });
+          if (stripeSubscription.items.data[0]) {
+            await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+              items: [{
+                id: stripeSubscription.items.data[0].id,
+                price: newPlan.stripePriceId,
+              }],
+              metadata: {
+                ...stripeSubscription.metadata,
+                planId: newPlan.id
+              }
+            });
+          }
         }
       }
 
@@ -375,16 +381,17 @@ export class PaymentService {
     console.log('Subscription updated:', subscription.id);
     
     // Update local subscription if it exists
-    const userId = subscription.metadata.userId;
+    const userId = subscription.metadata?.['userId'];
     if (userId) {
       const existingSubscription = subscriptions.get(userId);
       if (existingSubscription) {
-        const plan = this.getPlan(subscription.metadata.planId || 'regular-plan')!;
         existingSubscription.status = subscription.status as any;
-        existingSubscription.currentPeriodStart = new Date(subscription.current_period_start * 1000);
-        existingSubscription.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
-        existingSubscription.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : undefined;
-        existingSubscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+        existingSubscription.currentPeriodStart = new Date((subscription as any).current_period_start * 1000);
+        existingSubscription.currentPeriodEnd = new Date((subscription as any).current_period_end * 1000);
+        if ((subscription as any).trial_end) {
+          existingSubscription.trialEnd = new Date((subscription as any).trial_end * 1000);
+        }
+        existingSubscription.cancelAtPeriodEnd = (subscription as any).cancel_at_period_end;
         existingSubscription.updatedAt = new Date();
         subscriptions.set(userId, existingSubscription);
       }
@@ -395,7 +402,7 @@ export class PaymentService {
     console.log('Subscription deleted:', subscription.id);
     
     // Remove from local storage
-    const userId = subscription.metadata.userId;
+    const userId = subscription.metadata?.['userId'];
     if (userId) {
       subscriptions.delete(userId);
     }
