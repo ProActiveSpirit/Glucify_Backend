@@ -1,30 +1,31 @@
 import express from 'express';
 import { PaymentController } from '../controllers/paymentController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
-// Get available subscription plans
+// Get available subscription plans (no auth required)
 router.get('/plans', PaymentController.getPlans);
 
-// Get user's subscription status
-router.get('/subscription', PaymentController.getUserSubscription);
+// Get user's subscription status (requires auth)
+router.get('/subscription', authenticateToken, PaymentController.getUserSubscription);
 
-// Get beta user status
-router.get('/beta-status', PaymentController.getBetaStatus);
+// Get beta user status (requires auth)
+router.get('/beta-status', authenticateToken, PaymentController.getBetaStatus);
 
-// Create new subscription
-router.post('/subscription', PaymentController.createSubscription);
+// Create new subscription (requires auth)
+router.post('/subscription', authenticateToken, PaymentController.createSubscription);
 
-// Update subscription
-router.put('/subscription', PaymentController.updateSubscription);
+// Update subscription (requires auth)
+router.put('/subscription', authenticateToken, PaymentController.updateSubscription);
 
-// Cancel subscription
-router.delete('/subscription', PaymentController.cancelSubscription);
+// Cancel subscription (requires auth)
+router.delete('/subscription', authenticateToken, PaymentController.cancelSubscription);
 
-// Create payment intent
-router.post('/payment-intent', PaymentController.createPaymentIntent);
+// Create payment intent (requires auth)
+router.post('/payment-intent', authenticateToken, PaymentController.createPaymentIntent);
 
-// Stripe webhook endpoint
+// Stripe webhook endpoint (no auth required - uses webhook signature)
 router.post('/webhook', express.raw({ type: 'application/json' }), PaymentController.handleWebhook);
 
 export default router; 

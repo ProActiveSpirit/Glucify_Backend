@@ -28,10 +28,8 @@ export class PaymentController {
 
   // Create subscription
   static async createSubscription(req: Request, res: Response): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     try {
-      // @ts-expect-error: Assume user is added to req by authentication middleware
-      const user = req.user as { id?: string; email?: string } | undefined;
+      const user = req.user;
       const { planId, paymentMethodId }: CreateSubscriptionRequest = req.body;
       const userId = user?.id;
       const email = user?.email;
@@ -73,8 +71,7 @@ export class PaymentController {
   // Get user subscription
   static async getUserSubscription(req: Request, res: Response): Promise<void> {
     try {
-      // @ts-expect-error: Assume user is added to req by authentication middleware
-      const user = req.user as { id?: string } | undefined;
+      const user = req.user;
       const userId = user?.id;
 
       if (!userId) {
@@ -107,8 +104,7 @@ export class PaymentController {
   // Update subscription
   static async updateSubscription(req: Request, res: Response): Promise<void> {
     try {
-      // @ts-expect-error: Assume user is added to req by authentication middleware
-      const user = req.user as { id?: string } | undefined;
+      const user = req.user;
       const userId = user?.id;
       const updateData: UpdateSubscriptionRequest = req.body;
 
@@ -138,8 +134,7 @@ export class PaymentController {
   // Cancel subscription
   static async cancelSubscription(req: Request, res: Response): Promise<void> {
     try {
-      // @ts-expect-error: Assume user is added to req by authentication middleware
-      const user = req.user as { id?: string } | undefined;
+      const user = req.user;
       const userId = user?.id;
 
       if (!userId) {
@@ -230,8 +225,7 @@ export class PaymentController {
   // Get beta user status
   static async getBetaStatus(req: Request, res: Response): Promise<void> {
     try {
-      // @ts-expect-error: Assume user is added to req by authentication middleware
-      const user = req.user as { id?: string } | undefined;
+      const user = req.user;
       const userId = user?.id;
 
       if (!userId) {

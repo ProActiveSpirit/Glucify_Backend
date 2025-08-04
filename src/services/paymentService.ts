@@ -12,7 +12,7 @@ const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!, {
   apiVersion: '2025-07-30.basil',
 });
 
-// Define subscription plans
+// Define subscription plans with trial strategy
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'beta-plan',
@@ -25,7 +25,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
       'AI meal planning',
       'Glucose tracking',
       'Priority support',
-      'Early access to new features'
+      'Early access to new features',
+      'Locked at $9.99 forever'
     ],
     isBeta: true,
     maxUsers: 100
@@ -49,6 +50,9 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 // Beta user tracking
 let betaUserCount = 0;
 const betaUsers = new Map<string, BetaUser>();
+
+// In-memory subscription storage (replace with database in production)
+const subscriptions = new Map<string, UserSubscription>();
 
 export class PaymentService {
   // Get all available plans
@@ -99,7 +103,7 @@ export class PaymentService {
     }
   }
 
-  // Create subscription with trial
+  // Create subscription with 14-day trial
   static async createSubscription(
     userId: string, 
     email: string, 
@@ -125,10 +129,11 @@ export class PaymentService {
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent'],
-        trial_period_days: 14,
+        trial_period_days: 14, // 14-day free trial
         metadata: {
           userId: userId,
-          planId: finalPlan.id
+          planId: finalPlan.id,
+          isBetaUser: isBetaEligible && finalPlan.isBeta ? 'true' : 'false'
         }
       });
 
@@ -160,6 +165,10 @@ export class PaymentService {
         updatedAt: new Date()
       };
 
+      // Store subscription in memory (replace with database in production)
+      subscriptions.set(userId, userSubscription);
+
+      console.log(`✅ Created subscription for user ${userId} with ${finalPlan.id} plan and 14-day trial`);
       return userSubscription;
     } catch (error) {
       console.error('Error creating subscription:', error);
@@ -168,14 +177,68 @@ export class PaymentService {
   }
 
   // Get user subscription
-  static async getUserSubscription(_userId: string): Promise<UserSubscription | null> {
+  static async getUserSubscription(userId: string): Promise<UserSubscription | null> {
     try {
-      // In a real app, you'd fetch this from your database
-      // For now, we'll return null as placeholder
-      return null;
+      // Check in-memory storage first
+      const subscription = subscriptions.get(userId);
+      if (subscription) {
+        return subscription;
+      }
+
+      // If not in memory, try to fetch from Stripe
+      const customer = await this.findCustomerByUserId(userId);
+      if (!customer) {
+        return null;
+      }
+
+      const stripeSubscriptions = await stripe.subscriptions.list({
+        customer: customer.id,
+        limit: 1,
+        status: 'all'
+      });
+
+      if (stripeSubscriptions.data.length === 0) {
+        return null;
+      }
+
+      const stripeSubscription = stripeSubscriptions.data[0];
+      const plan = this.getPlan(stripeSubscription.metadata.planId || 'regular-plan')!;
+
+      const userSubscription: UserSubscription = {
+        id: stripeSubscription.id,
+        userId: userId,
+        stripeCustomerId: customer.id,
+        stripeSubscriptionId: stripeSubscription.id,
+        planId: plan.id,
+        status: stripeSubscription.status as any,
+        currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+        trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined,
+        cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+        createdAt: new Date(stripeSubscription.created * 1000),
+        updatedAt: new Date()
+      };
+
+      // Store in memory for future access
+      subscriptions.set(userId, userSubscription);
+      return userSubscription;
     } catch (error) {
       console.error('Error getting user subscription:', error);
       throw new Error('Failed to get subscription');
+    }
+  }
+
+  // Find customer by user ID
+  private static async findCustomerByUserId(userId: string): Promise<Stripe.Customer | null> {
+    try {
+      const customers = await stripe.customers.list({
+        limit: 100
+      });
+
+      return customers.data.find(customer => customer.metadata.userId === userId) || null;
+    } catch (error) {
+      console.error('Error finding customer:', error);
+      return null;
     }
   }
 
@@ -199,27 +262,33 @@ export class PaymentService {
           });
         }
 
-        if (request.planId) {
+        if (request.planId && request.planId !== subscription.planId) {
           const newPlan = this.getPlan(request.planId);
           if (!newPlan) {
             throw new Error('Invalid plan');
           }
 
-          const firstItem = stripeSubscription.items?.data?.[0];
-          if (!firstItem) {
-            throw new Error('No subscription items found to update');
-          }
+          // Update subscription items
           await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
             items: [{
-              id: firstItem.id,
+              id: stripeSubscription.items.data[0].id,
               price: newPlan.stripePriceId,
             }],
+            metadata: {
+              ...stripeSubscription.metadata,
+              planId: newPlan.id
+            }
           });
         }
       }
 
-      // Return updated subscription
-      return await this.getUserSubscription(userId) || subscription;
+      // Update local subscription
+      const updatedSubscription = await this.getUserSubscription(userId);
+      if (!updatedSubscription) {
+        throw new Error('Failed to get updated subscription');
+      }
+
+      return updatedSubscription;
     } catch (error) {
       console.error('Error updating subscription:', error);
       throw new Error('Failed to update subscription');
@@ -235,6 +304,11 @@ export class PaymentService {
       }
 
       await stripe.subscriptions.cancel(subscription.stripeSubscriptionId);
+      
+      // Update local subscription
+      subscriptions.delete(userId);
+      
+      console.log(`✅ Cancelled subscription for user ${userId}`);
     } catch (error) {
       console.error('Error canceling subscription:', error);
       throw new Error('Failed to cancel subscription');
@@ -265,7 +339,7 @@ export class PaymentService {
     }
   }
 
-  // Handle webhook events
+  // Handle Stripe webhooks
   static async handleWebhook(event: Stripe.Event): Promise<void> {
     try {
       switch (event.type) {
@@ -293,38 +367,53 @@ export class PaymentService {
     }
   }
 
-  // Webhook handlers
   private static async handleSubscriptionCreated(subscription: Stripe.Subscription): Promise<void> {
     console.log('Subscription created:', subscription.id);
-    // Update your database with subscription details
   }
 
   private static async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
     console.log('Subscription updated:', subscription.id);
-    // Update your database with subscription details
+    
+    // Update local subscription if it exists
+    const userId = subscription.metadata.userId;
+    if (userId) {
+      const existingSubscription = subscriptions.get(userId);
+      if (existingSubscription) {
+        const plan = this.getPlan(subscription.metadata.planId || 'regular-plan')!;
+        existingSubscription.status = subscription.status as any;
+        existingSubscription.currentPeriodStart = new Date(subscription.current_period_start * 1000);
+        existingSubscription.currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+        existingSubscription.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000) : undefined;
+        existingSubscription.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+        existingSubscription.updatedAt = new Date();
+        subscriptions.set(userId, existingSubscription);
+      }
+    }
   }
 
   private static async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
     console.log('Subscription deleted:', subscription.id);
-    // Update your database to mark subscription as canceled
+    
+    // Remove from local storage
+    const userId = subscription.metadata.userId;
+    if (userId) {
+      subscriptions.delete(userId);
+    }
   }
 
   private static async handlePaymentSucceeded(invoice: Stripe.Invoice): Promise<void> {
     console.log('Payment succeeded for invoice:', invoice.id);
-    // Update subscription status to active
   }
 
   private static async handlePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
     console.log('Payment failed for invoice:', invoice.id);
-    // Update subscription status to past_due
   }
 
-  // Get beta user count
+  // Beta user management
   static getBetaUserCount(): number {
     return betaUserCount;
   }
 
-  // Check if user is beta user
   static isBetaUser(userId: string): boolean {
     return betaUsers.has(userId);
   }
