@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PaymentService } from '../services/paymentService';
+import { TrialService } from '../services/trialService';
 import { CreateSubscriptionRequest, UpdateSubscriptionRequest } from '../types/payment';
 
 export class PaymentController {
@@ -7,7 +8,7 @@ export class PaymentController {
   static async getPlans(_req: Request, res: Response): Promise<void> {
     try {
       const plans = PaymentService.getPlans();
-      const betaUserCount = PaymentService.getBetaUserCount();
+      const betaUserCount = await TrialService.getBetaUserCount();
       
       res.json({
         success: true,
@@ -83,7 +84,7 @@ export class PaymentController {
       }
 
       const subscription = await PaymentService.getUserSubscription(userId);
-      const isBetaUser = PaymentService.isBetaUser(userId);
+      const isBetaUser = await TrialService.isBetaUser(userId);
 
       res.json({
         success: true,
@@ -236,8 +237,8 @@ export class PaymentController {
         return;
       }
 
-      const isBetaUser = PaymentService.isBetaUser(userId);
-      const betaUserCount = PaymentService.getBetaUserCount();
+      const isBetaUser = await TrialService.isBetaUser(userId);
+      const betaUserCount = await TrialService.getBetaUserCount();
 
       res.json({
         success: true,

@@ -6,6 +6,7 @@ import {
   CreateSubscriptionRequest,
   UpdateSubscriptionRequest,
   BetaUser} from '../types/payment';
+import { TrialService } from './trialService';
 
 // Initialize Stripe
 const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!, {
@@ -65,7 +66,7 @@ export class PaymentService {
     return SUBSCRIPTION_PLANS.find(plan => plan.id === planId) || null;
   }
 
-  // Check if user can get beta pricing
+  // Check if user can get beta pricing (deprecated - use TrialService)
   static canGetBetaPricing(userId: string, _email: string): boolean {
     if (betaUserCount >= 100) return false;
     if (betaUsers.has(userId)) return true;
@@ -103,7 +104,7 @@ export class PaymentService {
     }
   }
 
-  // Create subscription with 14-day trial
+  // Create subscription with automatic trial conversion
   static async createSubscription(
     userId: string, 
     email: string, 
@@ -115,21 +116,26 @@ export class PaymentService {
         throw new Error('Invalid plan');
       }
 
-      // Check beta eligibility
-      const isBetaEligible = this.canGetBetaPricing(userId, email);
+      // Check beta eligibility using TrialService
+      const isBetaEligible = await TrialService.canGetBetaPricing(userId);
       const finalPlan = isBetaEligible && plan.isBeta ? plan : this.getPlan('regular-plan')!;
 
       // Create or get customer
       const customerId = await this.createOrGetCustomer(userId, email);
 
-      // Create subscription with 14-day trial
+      // End the trial when user subscribes
+      await TrialService.endTrial(userId);
+
+      // Create subscription with monthly billing cycle (no trial period since user already had trial)
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: finalPlan.stripePriceId }],
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent'],
-        trial_period_days: 14, // 14-day free trial
+        // Set billing cycle to monthly
+        billing_cycle_anchor: Math.floor(Date.now() / 1000),
+        collection_method: 'charge_automatically',
         metadata: {
           userId: userId,
           planId: finalPlan.id,
@@ -156,10 +162,9 @@ export class PaymentService {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         planId: finalPlan.id,
-        status: 'trial',
+        status: 'active',
         currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
         currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
-        ...((subscription as any).trial_end && { trialEnd: new Date((subscription as any).trial_end * 1000) }),
         cancelAtPeriodEnd: false,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -168,7 +173,7 @@ export class PaymentService {
       // Store subscription in memory (replace with database in production)
       subscriptions.set(userId, userSubscription);
 
-      console.log(`✅ Created subscription for user ${userId} with ${finalPlan.id} plan and 14-day trial`);
+      console.log(`✅ Created subscription for user ${userId} with ${finalPlan.id} plan (trial converted)`);
       return userSubscription;
     } catch (error) {
       console.error('Error creating subscription:', error);
@@ -416,7 +421,7 @@ export class PaymentService {
     console.log('Payment failed for invoice:', invoice.id);
   }
 
-  // Beta user management
+  // Beta user management (deprecated - use TrialService)
   static getBetaUserCount(): number {
     return betaUserCount;
   }
