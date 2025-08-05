@@ -18,15 +18,6 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
     const authHeader = req.headers.authorization;
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    console.log('🔐 Auth middleware debug:', {
-      hasAuthHeader: !!authHeader,
-      authHeaderType: authHeader?.split(' ')[0],
-      hasToken: !!token,
-      tokenLength: token?.length || 0,
-      endpoint: req.path,
-      method: req.method
-    });
-
     if (!token) {
       console.log('❌ No token provided in Authorization header');
       res.status(401).json({
