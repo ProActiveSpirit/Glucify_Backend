@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { supabaseAdmin } from '../config/database';
+import jwt from 'jsonwebtoken';
 
 // Extend the Request interface to include user
 declare global {
@@ -36,56 +36,47 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
       return;
     }
 
-    console.log('🔐 Attempting to validate token...');
-
-    // Try to get user session using the token
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-
-    console.log('🔐 Token validation result:', {
-      hasData: !!data,
-      hasUser: !!data?.user,
-      hasError: !!error,
-      errorMessage: error?.message,
-      errorCode: error?.status
-    });
-
-    if (error) {
-      console.error('❌ Token verification failed:', error);
+    try {
+      // First, try to verify the JWT token directly
+      const decoded = jwt.decode(token) as any;
       
-      // If it's a 401 error, it means the token is invalid
-      if (error.status === 401) {
+      if (!decoded || !decoded.sub) {
+        console.error('❌ Invalid JWT token format');
         res.status(401).json({
           success: false,
-          error: 'Invalid or expired token'
+          error: 'Invalid token format'
         });
         return;
       }
-      
-      // For other errors, return a generic error
-      res.status(500).json({
-        success: false,
-        error: 'Authentication service error'
-      });
-      return;
-    }
 
-    if (!data?.user) {
-      console.error('❌ No user found for token');
+      // Check if token is expired
+      if (decoded.exp && Date.now() >= decoded.exp * 1000) {
+        console.error('❌ Token has expired');
+        res.status(401).json({
+          success: false,
+          error: 'Token has expired'
+        });
+        return;
+      }
+
+      // Extract user information from JWT token
+      const userId = decoded.sub;
+      const userEmail = decoded.email || '';
+
+      // Add user information to the request object
+      req.user = {
+        id: userId,
+        email: userEmail
+      };
+
+      next();
+    } catch (jwtError) {
+      console.error('❌ JWT validation failed:', jwtError);
       res.status(401).json({
         success: false,
-        error: 'Invalid or expired token'
+        error: 'Invalid token'
       });
-      return;
     }
-
-    // Add user information to the request object
-    req.user = {
-      id: data.user.id,
-      email: data.user.email || ''
-    };
-
-    console.log('✅ Authentication successful for user:', data.user.id);
-    next();
   } catch (error) {
     console.error('❌ Authentication middleware error:', error);
     res.status(500).json({

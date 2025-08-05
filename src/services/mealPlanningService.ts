@@ -1,10 +1,10 @@
-import { supabaseAdmin } from '../config/database';
+import { supabase } from '../config/database';
 import { MealPlan, UserPreferences, FoodItem, DailyMeal } from '../types';
 
 export class MealPlanningService {
   static async getMealPlan(userId: string, date: string): Promise<MealPlan | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('meal_plans')
         .select('*')
         .eq('user_id', userId)
@@ -23,7 +23,7 @@ export class MealPlanningService {
 
   static async saveMealPlan(mealPlan: Omit<MealPlan, 'id' | 'created_at' | 'updated_at'>): Promise<MealPlan | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('meal_plans')
         .insert([mealPlan])
         .select()
@@ -41,7 +41,7 @@ export class MealPlanningService {
 
   static async updateMealPlan(mealPlanId: string, updates: Partial<MealPlan>): Promise<MealPlan | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('meal_plans')
         .update(updates)
         .eq('id', mealPlanId)
@@ -60,7 +60,7 @@ export class MealPlanningService {
 
   static async deleteMealPlan(mealPlanId: string): Promise<boolean> {
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await supabase
         .from('meal_plans')
         .delete()
         .eq('id', mealPlanId);
@@ -73,7 +73,7 @@ export class MealPlanningService {
 
   static async getUserPreferences(userId: string): Promise<UserPreferences | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('user_preferences')
         .select('*')
         .eq('user_id', userId)
@@ -91,7 +91,7 @@ export class MealPlanningService {
 
   static async saveUserPreferences(preferences: Omit<UserPreferences, 'created_at' | 'updated_at'>): Promise<UserPreferences | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('user_preferences')
         .upsert([preferences])
         .select()

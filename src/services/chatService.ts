@@ -1,11 +1,11 @@
-import { supabaseAdmin } from '../config/database';
+import { supabase } from '../config/database';
 import { ChatConversation } from '../types';
 import { AIService } from './aiService';
 
 export class ChatService {
   static async logConversation(conversation: Omit<ChatConversation, 'id' | 'created_at'>): Promise<ChatConversation | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('chat_conversations')
         .insert([conversation])
         .select()
@@ -23,7 +23,7 @@ export class ChatService {
 
   static async getConversations(userId: string, limit: number = 50): Promise<ChatConversation[]> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('chat_conversations')
         .select('*')
         .eq('user_id', userId)

@@ -1,10 +1,10 @@
-import { supabaseAdmin } from '../config/database';
+import { supabase } from '../config/database';
 import { GlucoseReading, GlucoseStats } from '../types';
 
 export class GlucoseService {
   static async addReading(reading: Omit<GlucoseReading, 'id' | 'created_at'>): Promise<GlucoseReading | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('glucose_readings')
         .insert([reading])
         .select()
@@ -22,7 +22,7 @@ export class GlucoseService {
 
   static async getReadings(userId: string, limit: number = 100): Promise<GlucoseReading[]> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('glucose_readings')
         .select('*')
         .eq('user_id', userId)
@@ -45,7 +45,7 @@ export class GlucoseService {
     endDate: string
   ): Promise<GlucoseReading[]> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('glucose_readings')
         .select('*')
         .eq('user_id', userId)
@@ -117,7 +117,7 @@ export class GlucoseService {
 
   static async deleteReading(readingId: string): Promise<boolean> {
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await supabase
         .from('glucose_readings')
         .delete()
         .eq('id', readingId);
@@ -133,7 +133,7 @@ export class GlucoseService {
     updates: Partial<GlucoseReading>
   ): Promise<GlucoseReading | null> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('glucose_readings')
         .update(updates)
         .eq('id', readingId)

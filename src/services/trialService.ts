@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin } from '../config/database';
+import { supabase } from '../config/database';
 import { UserTrial, TrialStatus } from '../types/payment';
 
 export class TrialService {
@@ -15,8 +15,17 @@ export class TrialService {
       const betaUserCount = await this.getBetaUserCount();
       const isBetaUser = betaUserCount < this.MAX_BETA_USERS;
       const betaUserNumber = isBetaUser ? await this.getNextBetaUserNumber() : undefined;
+      
+      console.log('🔐 Creating trial for user:', userId);
+      console.log('🔐 Is beta user:', isBetaUser);
+      console.log('🔐 Beta user number:', betaUserNumber);
+      console.log('🔐 Trial start date:', trialStartDate.toISOString());
+      console.log('🔐 Trial end date:', trialEndDate.toISOString());
+      console.log('🔐 Email:', email);
+      console.log('🔐 Beta user count:', betaUserCount);
+      console.log('🔐 Max beta users:', this.MAX_BETA_USERS);
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('user_trials')
         .insert({
           user_id: userId,
@@ -103,7 +112,7 @@ export class TrialService {
   // End trial for a user (when they subscribe)
   static async endTrial(userId: string): Promise<void> {
     try {
-      const { error } = await supabaseAdmin
+      const { error } = await supabase
         .from('user_trials')
         .update({ is_active: false })
         .eq('user_id', userId)
@@ -124,7 +133,7 @@ export class TrialService {
   // Get beta user count
   static async getBetaUserCount(): Promise<number> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .rpc('get_beta_user_count');
 
       if (error) {
@@ -142,7 +151,7 @@ export class TrialService {
   // Get next beta user number
   static async getNextBetaUserNumber(): Promise<number> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .rpc('get_next_beta_user_number');
 
       if (error) {
@@ -198,7 +207,7 @@ export class TrialService {
   // Get all active trials (for admin purposes)
   static async getActiveTrials(): Promise<UserTrial[]> {
     try {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('user_trials')
         .select('*')
         .eq('is_active', true)
@@ -220,7 +229,7 @@ export class TrialService {
   static async cleanupExpiredTrials(): Promise<number> {
     try {
       const now = new Date();
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('user_trials')
         .update({ is_active: false })
         .lt('trial_end_date', now.toISOString())
