@@ -278,9 +278,9 @@ export class PaymentService {
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: finalPlan.stripePriceId }],
-        payment_behavior: 'default_incomplete',
-        payment_settings: { save_default_payment_method: 'on_subscription' },
-        expand: ['latest_invoice.payment_intent'],
+        // payment_behavior: 'default_incomplete',
+        // payment_settings: s{ save_default_payment_method: 'on_subscription' },
+        // expand: ['latest_invoice.payment_intent'],
         collection_method: 'charge_automatically',
         metadata: {
           userId: userId,
