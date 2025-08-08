@@ -116,7 +116,7 @@ export class TrialService {
         .from('user_trials')
         .update({ is_active: false })
         .eq('user_id', userId)
-        .eq('is_active', true);
+        // .eq('is_active', true);
 
       if (error) {
         console.error('Error ending trial:', error);
