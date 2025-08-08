@@ -255,8 +255,8 @@ export class PaymentService {
       console.log('✅ Customer ID:', customerId);
 
       // End the trial when user subscribes
-      await TrialService.endTrial(userId);
-      console.log('✅ Trial ended for user');
+      // await TrialService.endTrial(userId);
+      // console.log('✅ Trial ended for user');
 
       // Create subscription with appropriate billing cycle
       console.log('🔄 Creating Stripe subscription...');
