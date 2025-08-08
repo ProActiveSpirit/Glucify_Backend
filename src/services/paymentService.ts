@@ -9,10 +9,35 @@ import {
 import { TrialService } from './trialService';
 import { supabase } from '../config/database';
 
-// Initialize Stripe
-const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!, {
+// Initialize Stripe with error handling
+const stripeSecretKey = process.env['STRIPE_SECRET_KEY'];
+if (!stripeSecretKey) {
+  console.error('❌ STRIPE_SECRET_KEY is not set in environment variables');
+  throw new Error('Stripe secret key is not configured');
+}
+
+const stripe = new Stripe(stripeSecretKey, {
   apiVersion: '2025-07-30.basil',
 });
+
+// Validate Stripe price IDs
+const validateStripePriceIds = () => {
+  const requiredPriceIds = [
+    'STRIPE_BETA_MONTHLY_PRICE_ID',
+    'STRIPE_BETA_YEARLY_PRICE_ID',
+    'STRIPE_REGULAR_MONTHLY_PRICE_ID',
+    'STRIPE_REGULAR_YEARLY_PRICE_ID'
+  ];
+
+  const missingPriceIds = requiredPriceIds.filter(id => !process.env[id]);
+  if (missingPriceIds.length > 0) {
+    console.error('❌ Missing Stripe price IDs:', missingPriceIds);
+    throw new Error(`Missing Stripe price IDs: ${missingPriceIds.join(', ')}`);
+  }
+};
+
+// Validate environment variables on startup
+validateStripePriceIds();
 
 // Define subscription plans with trial strategy
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
@@ -90,6 +115,48 @@ const betaUsers = new Map<string, BetaUser>();
 const subscriptions = new Map<string, UserSubscription>();
 
 export class PaymentService {
+  // Health check method for Railway deployment
+  static async healthCheck(): Promise<boolean> {
+    try {
+      console.log('🔍 PaymentService health check starting...');
+      
+      // Check if Stripe is configured
+      if (!stripeSecretKey) {
+        console.error('❌ Stripe secret key not configured');
+        return false;
+      }
+      
+      // Check if all price IDs are configured
+      const requiredPriceIds = [
+        'STRIPE_BETA_MONTHLY_PRICE_ID',
+        'STRIPE_BETA_YEARLY_PRICE_ID',
+        'STRIPE_REGULAR_MONTHLY_PRICE_ID',
+        'STRIPE_REGULAR_YEARLY_PRICE_ID'
+      ];
+      
+      const missingPriceIds = requiredPriceIds.filter(id => !process.env[id]);
+      if (missingPriceIds.length > 0) {
+        console.error('❌ Missing Stripe price IDs:', missingPriceIds);
+        return false;
+      }
+      
+      // Test Stripe connection
+      try {
+        await stripe.paymentMethods.list({ limit: 1 });
+        console.log('✅ Stripe connection successful');
+      } catch (error) {
+        console.error('❌ Stripe connection failed:', error);
+        return false;
+      }
+      
+      console.log('✅ PaymentService health check passed');
+      return true;
+    } catch (error) {
+      console.error('❌ PaymentService health check failed:', error);
+      return false;
+    }
+  }
+
   // Get all available plans
   static getPlans(): SubscriptionPlan[] {
     return SUBSCRIPTION_PLANS;
@@ -145,13 +212,20 @@ export class PaymentService {
     request: CreateSubscriptionRequest
   ): Promise<UserSubscription> {
     try {
+      console.log('🔍 Starting subscription creation for user:', userId);
+      console.log('📋 Request details:', request);
+
       const plan = this.getPlan(request.planId);
       if (!plan) {
+        console.error('❌ Invalid plan ID:', request.planId);
         throw new Error('Invalid plan');
       }
 
+      console.log('✅ Plan found:', plan.id);
+
       // Check beta eligibility using TrialService
       const isBetaEligible = await TrialService.canGetBetaPricing(userId);
+      console.log('🔍 Beta eligibility check:', isBetaEligible);
       
       // Determine the correct plan based on user eligibility and requested plan
       let finalPlan = plan;
@@ -162,6 +236,7 @@ export class PaymentService {
         } else {
           finalPlan = this.getPlan('regular-yearly')!;
         }
+        console.log('⚠️ User not eligible for beta, using regular plan:', finalPlan.id);
       } else if (!plan.isBeta && isBetaEligible) {
         // If user is eligible for beta but requested regular plan, upgrade to beta plan
         if (plan.interval === 'month') {
@@ -169,15 +244,22 @@ export class PaymentService {
         } else {
           finalPlan = this.getPlan('beta-yearly')!;
         }
+        console.log('🎉 User eligible for beta, upgrading to beta plan:', finalPlan.id);
       }
+
+      console.log('✅ Final plan selected:', finalPlan.id);
+      console.log('💰 Stripe price ID:', finalPlan.stripePriceId);
 
       // Create or get customer
       const customerId = await this.createOrGetCustomer(userId, email);
+      console.log('✅ Customer ID:', customerId);
 
       // End the trial when user subscribes
       await TrialService.endTrial(userId);
+      console.log('✅ Trial ended for user');
 
       // Create subscription with appropriate billing cycle
+      console.log('🔄 Creating Stripe subscription...');
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: finalPlan.stripePriceId }],
@@ -191,6 +273,7 @@ export class PaymentService {
           isBetaUser: finalPlan.isBeta ? 'true' : 'false'
         }
       });
+      console.log('✅ Stripe subscription created:', subscription.id);
 
       // Track beta user if applicable
       if (finalPlan.isBeta) {
@@ -248,7 +331,21 @@ export class PaymentService {
       console.log(`✅ Created subscription for user ${userId} with ${finalPlan.id} plan (trial converted)`);
       return userSubscription;
     } catch (error) {
-      console.error('Error creating subscription:', error);
+      console.error('❌ Error creating subscription:', error);
+      
+      // Log detailed error information
+      if (error instanceof Error) {
+        console.error('❌ Error message:', error.message);
+        console.error('❌ Error stack:', error.stack);
+      }
+      
+      // Check if it's a Stripe error
+      if (error && typeof error === 'object' && 'type' in error) {
+        console.error('❌ Stripe error type:', (error as any).type);
+        console.error('❌ Stripe error code:', (error as any).code);
+        console.error('❌ Stripe error param:', (error as any).param);
+      }
+      
       throw new Error('Failed to create subscription');
     }
   }

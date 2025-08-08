@@ -4,6 +4,9 @@ import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
+// Health check endpoint (no auth required)
+router.get('/health', PaymentController.healthCheck);
+
 // Get available subscription plans (no auth required)
 router.get('/plans', PaymentController.getPlans);
 

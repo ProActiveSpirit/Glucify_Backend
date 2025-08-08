@@ -4,6 +4,36 @@ import { TrialService } from '../services/trialService';
 import { CreateSubscriptionRequest, UpdateSubscriptionRequest } from '../types/payment';
 
 export class PaymentController {
+  // Health check endpoint for Railway deployment
+  static async healthCheck(_req: Request, res: Response): Promise<void> {
+    try {
+      console.log('🔍 Payment health check endpoint called');
+      
+      const isHealthy = await PaymentService.healthCheck();
+      
+      if (isHealthy) {
+        res.json({
+          success: true,
+          message: 'Payment service is healthy',
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: 'Payment service is not healthy',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('❌ Health check error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Health check failed',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
   // Get available subscription plans
   static async getPlans(_req: Request, res: Response): Promise<void> {
     try {
