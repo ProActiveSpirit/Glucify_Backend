@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { HttpError } from '../utils/httpError';
 import { 
   SubscriptionPlan, 
   UserSubscription, 
@@ -201,7 +202,15 @@ export class PaymentService {
       return customer.id;
     } catch (error) {
       console.error('Error creating/getting customer:', error);
-      throw new Error('Failed to create customer');
+      // Narrow Stripe error if present
+      const err: any = error;
+      const status = typeof err?.statusCode === 'number' ? err.statusCode : 400;
+      const code = typeof err?.code === 'string' ? err.code : 'STRIPE_CUSTOMER_ERROR';
+      throw new HttpError(status, err?.message || 'Failed to create customer', code, {
+        type: err?.type,
+        decline_code: err?.decline_code,
+        param: err?.param
+      });
     }
   }
 
@@ -218,7 +227,7 @@ export class PaymentService {
       const plan = this.getPlan(request.planId);
       if (!plan) {
         console.error('❌ Invalid plan ID:', request.planId);
-        throw new Error('Invalid plan');
+        throw new HttpError(400, 'Invalid plan', 'INVALID_PLAN', { planId: request.planId });
       }
 
       console.log('✅ Plan found:', plan.id);
@@ -249,6 +258,12 @@ export class PaymentService {
 
       console.log('✅ Final plan selected:', finalPlan.id);
       console.log('💰 Stripe price ID:', finalPlan.stripePriceId);
+
+      if (!finalPlan.stripePriceId) {
+        throw new HttpError(500, 'Stripe price ID not configured for selected plan', 'MISSING_PRICE_ID', {
+          planId: finalPlan.id
+        });
+      }
 
       // Create or get customer
       const customerId = await this.createOrGetCustomer(userId, email);
@@ -339,14 +354,24 @@ export class PaymentService {
         console.error('❌ Error stack:', error.stack);
       }
       
-      // Check if it's a Stripe error
-      if (error && typeof error === 'object' && 'type' in error) {
-        console.error('❌ Stripe error type:', (error as any).type);
-        console.error('❌ Stripe error code:', (error as any).code);
-        console.error('❌ Stripe error param:', (error as any).param);
+      // Check if it's a Stripe error and rethrow with details for controller to return
+      const err: any = error;
+      if (err && typeof err === 'object' && 'type' in err) {
+        console.error('❌ Stripe error type:', err.type);
+        console.error('❌ Stripe error code:', err.code);
+        console.error('❌ Stripe error param:', err.param);
+        const status = typeof err?.statusCode === 'number' ? err.statusCode : 400;
+        throw new HttpError(status, err.message || 'Stripe error creating subscription', err.code, {
+          type: err.type,
+          decline_code: err.decline_code,
+          param: err.param
+        });
       }
-      
-      throw new Error('Failed to create subscription');
+
+      // Otherwise wrap in HttpError for consistent response
+      throw new HttpError(500, 'Failed to create subscription', 'SUBSCRIPTION_CREATE_FAILED', {
+        originalMessage: (error as any)?.message
+      });
     }
   }
 

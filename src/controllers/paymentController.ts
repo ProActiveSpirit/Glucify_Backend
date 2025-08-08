@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import Stripe from 'stripe';
+import { HttpError } from '../utils/httpError';
 import { PaymentService } from '../services/paymentService';
 import { TrialService } from '../services/trialService';
 import { CreateSubscriptionRequest, UpdateSubscriptionRequest } from '../types/payment';
@@ -92,10 +94,39 @@ export class PaymentController {
       });
     } catch (error) {
       console.error('Error creating subscription:', error);
+
+      // Stripe error shape narrowing
+      const isStripeError = (err: any): err is Stripe.errors.StripeError =>
+        err && typeof err === 'object' && typeof err.type === 'string' && typeof err.message === 'string';
+
+      if (isStripeError(error)) {
+        const status = (error as any).statusCode || 400;
+        res.status(status).json({
+          success: false,
+          error: error.message,
+          code: error.code,
+          type: error.type,
+          decline_code: (error as any).decline_code,
+          param: error.param
+        });
+        return;
+      }
+
+      if (error instanceof HttpError) {
+        res.status(error.status).json({
+          success: false,
+          error: error.message,
+          code: error.code,
+          details: error.details
+        });
+        return;
+      }
+
       res.status(500).json({
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create subscription'
+        error: error instanceof Error ? error.message : 'Failed to create subscription',
       });
+      return;
     }
   }
 
