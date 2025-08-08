@@ -268,14 +268,19 @@ export class PaymentService {
       // Create or get customer
       const customerId = await this.createOrGetCustomer(userId, email);
       console.log('✅ Customer ID:', customerId);
-      const paymentMethod = await stripe.paymentMethods.attach(
-        request.paymentMethodId,
-        {
-          customer: customerId,
-        }
-      );
-
+      // Attach the payment method to the customer (if not already)
+      const paymentMethod = await stripe.paymentMethods.attach(request.paymentMethodId, {
+        customer: customerId,
+      });
       console.log('✅ Payment method attached:', paymentMethod);
+
+      // Set as customer's default payment method for invoices/subscriptions
+      await stripe.customers.update(customerId, {
+        invoice_settings: {
+          default_payment_method: request.paymentMethodId,
+        },
+      });
+      console.log('✅ Set default payment method on customer');
 
       // End the trial when user subscribes
       // await TrialService.endTrial(userId);
@@ -286,9 +291,7 @@ export class PaymentService {
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: finalPlan.stripePriceId }],
-        // payment_behavior: 'default_incomplete',
-        // payment_settings: s{ save_default_payment_method: 'on_subscription' },
-        // expand: ['latest_invoice.payment_intent'],
+        default_payment_method: request.paymentMethodId,
         collection_method: 'charge_automatically',
         metadata: {
           userId: userId,
