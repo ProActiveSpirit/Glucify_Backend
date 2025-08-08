@@ -268,6 +268,14 @@ export class PaymentService {
       // Create or get customer
       const customerId = await this.createOrGetCustomer(userId, email);
       console.log('✅ Customer ID:', customerId);
+      const paymentMethod = await stripe.paymentMethods.attach(
+        request.paymentMethodId,
+        {
+          customer: customerId,
+        }
+      );
+
+      console.log('✅ Payment method attached:', paymentMethod);
 
       // End the trial when user subscribes
       // await TrialService.endTrial(userId);
