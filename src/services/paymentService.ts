@@ -7,6 +7,7 @@ import {
   UpdateSubscriptionRequest,
   BetaUser} from '../types/payment';
 import { TrialService } from './trialService';
+import { supabase } from '../config/database';
 
 // Initialize Stripe
 const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!, {
@@ -16,11 +17,11 @@ const stripe = new Stripe(process.env['STRIPE_SECRET_KEY']!, {
 // Define subscription plans with trial strategy
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
-    id: 'beta-plan',
-    name: 'Beta User Plan',
+    id: 'beta-monthly',
+    name: 'Beta Monthly',
     price: 9.99,
     interval: 'month',
-    stripePriceId: process.env['STRIPE_BETA_PRICE_ID']!,
+    stripePriceId: process.env['STRIPE_BETA_MONTHLY_PRICE_ID']!,
     features: [
       'Unlimited food analysis',
       'AI meal planning',
@@ -33,17 +34,50 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     maxUsers: 100
   },
   {
-    id: 'regular-plan',
-    name: 'Regular Plan',
+    id: 'beta-yearly',
+    name: 'Beta Yearly',
+    price: 95.90, // 9.99 * 12 * 0.8 (20% discount)
+    interval: 'year',
+    stripePriceId: process.env['STRIPE_BETA_YEARLY_PRICE_ID']!,
+    features: [
+      'Unlimited food analysis',
+      'AI meal planning',
+      'Glucose tracking',
+      'Priority support',
+      'Early access to new features',
+      '20% discount on yearly plan',
+      'Locked at $9.99 forever'
+    ],
+    isBeta: true,
+    maxUsers: 100
+  },
+  {
+    id: 'regular-monthly',
+    name: 'Regular Monthly',
     price: 24.99,
     interval: 'month',
-    stripePriceId: process.env['STRIPE_REGULAR_PRICE_ID']!,
+    stripePriceId: process.env['STRIPE_REGULAR_MONTHLY_PRICE_ID']!,
     features: [
       'Unlimited food analysis',
       'AI meal planning',
       'Glucose tracking',
       'Email support',
       'All features included'
+    ]
+  },
+  {
+    id: 'regular-yearly',
+    name: 'Regular Yearly',
+    price: 239.90, // 24.99 * 12 * 0.8 (20% discount)
+    interval: 'year',
+    stripePriceId: process.env['STRIPE_REGULAR_YEARLY_PRICE_ID']!,
+    features: [
+      'Unlimited food analysis',
+      'AI meal planning',
+      'Glucose tracking',
+      'Email support',
+      'All features included',
+      '20% discount on yearly plan'
     ]
   }
 ];
@@ -118,7 +152,24 @@ export class PaymentService {
 
       // Check beta eligibility using TrialService
       const isBetaEligible = await TrialService.canGetBetaPricing(userId);
-      const finalPlan = isBetaEligible && plan.isBeta ? plan : this.getPlan('regular-plan')!;
+      
+      // Determine the correct plan based on user eligibility and requested plan
+      let finalPlan = plan;
+      if (plan.isBeta && !isBetaEligible) {
+        // If user requested beta plan but is not eligible, fall back to regular plan
+        if (plan.interval === 'month') {
+          finalPlan = this.getPlan('regular-monthly')!;
+        } else {
+          finalPlan = this.getPlan('regular-yearly')!;
+        }
+      } else if (!plan.isBeta && isBetaEligible) {
+        // If user is eligible for beta but requested regular plan, upgrade to beta plan
+        if (plan.interval === 'month') {
+          finalPlan = this.getPlan('beta-monthly')!;
+        } else {
+          finalPlan = this.getPlan('beta-yearly')!;
+        }
+      }
 
       // Create or get customer
       const customerId = await this.createOrGetCustomer(userId, email);
@@ -126,25 +177,24 @@ export class PaymentService {
       // End the trial when user subscribes
       await TrialService.endTrial(userId);
 
-      // Create subscription with monthly billing cycle (no trial period since user already had trial)
+      // Create subscription with appropriate billing cycle
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: finalPlan.stripePriceId }],
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent'],
-        // Set billing cycle to monthly
         billing_cycle_anchor: Math.floor(Date.now() / 1000),
         collection_method: 'charge_automatically',
         metadata: {
           userId: userId,
           planId: finalPlan.id,
-          isBetaUser: isBetaEligible && finalPlan.isBeta ? 'true' : 'false'
+          isBetaUser: finalPlan.isBeta ? 'true' : 'false'
         }
       });
 
       // Track beta user if applicable
-      if (isBetaEligible && finalPlan.isBeta) {
+      if (finalPlan.isBeta) {
         betaUsers.set(userId, {
           id: userId,
           userId: userId,
@@ -172,6 +222,29 @@ export class PaymentService {
 
       // Store subscription in memory (replace with database in production)
       subscriptions.set(userId, userSubscription);
+
+      // Update user_trials table with subscription start and end dates
+      try {
+        const { error: trialUpdateError } = await supabase
+          .from('user_trials')
+          .update({
+            trial_start_date: new Date().toISOString(),
+            trial_end_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+
+        if (trialUpdateError) {
+          console.error('Error updating trial table:', trialUpdateError);
+          // Don't fail the subscription creation for trial update error
+        } else {
+          console.log(`✅ Updated trial table for user ${userId}`);
+        }
+      } catch (error) {
+        console.error('Error updating trial table:', error);
+        // Don't fail the subscription creation for trial update error
+      }
 
       console.log(`✅ Created subscription for user ${userId} with ${finalPlan.id} plan (trial converted)`);
       return userSubscription;
