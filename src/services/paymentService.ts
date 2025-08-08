@@ -184,7 +184,6 @@ export class PaymentService {
         payment_behavior: 'default_incomplete',
         payment_settings: { save_default_payment_method: 'on_subscription' },
         expand: ['latest_invoice.payment_intent'],
-        billing_cycle_anchor: Math.floor(Date.now() / 1000),
         collection_method: 'charge_automatically',
         metadata: {
           userId: userId,
