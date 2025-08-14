@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { DexcomController } from '../controllers/dexcomController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -14,5 +15,8 @@ router.get('/glucose', DexcomController.getGlucoseReadings);
 
 // POST /api/dexcom/validate - Validate access token
 router.post('/validate', DexcomController.validateToken);
+
+// POST /api/dexcom/bridge/apply - Set Railway envs and redeploy Nightscout project
+router.post('/bridge/apply', authenticateToken, DexcomController.applyBridgeEnvAndRedeploy);
 
 export default router;

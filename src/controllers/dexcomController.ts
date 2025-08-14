@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
+import { exec } from 'child_process';
+import util from 'util';
+
+const execAsync = util.promisify(exec);
 
 interface DexcomTokenRequest {
   code: string;
@@ -267,6 +271,46 @@ export class DexcomController {
           error: 'Error validating token'
         });
       }
+    }
+  }
+
+  // POST /api/dexcom/bridge/apply
+  // Sets Railway env vars for Nightscout project and triggers redeploy
+  static async applyBridgeEnvAndRedeploy(req: Request, res: Response): Promise<void> {
+    try {
+      const { railway_project_id, bridge_username, bridge_password } = req.body || {};
+
+      if (!railway_project_id || !bridge_username || !bridge_password) {
+        res.status(400).json({ success: false, error: 'Missing required fields: railway_project_id, bridge_username, bridge_password' });
+        return;
+      }
+
+      const RAILWAY_TOKEN = process.env['RAILWAY_TOKEN'];
+      if (!RAILWAY_TOKEN) {
+        res.status(500).json({ success: false, error: 'RAILWAY_TOKEN not configured on backend' });
+        return;
+      }
+      console.log('🔄 Applying Railway env vars and redeploying project:', {
+        railway_project_id,
+        bridge_username,
+        bridge_password
+      });
+      const projectFlag = `-p ${railway_project_id}`;
+
+      // Set variables
+      await execAsync(`railway variables set BRIDGE_USER_NAME="${bridge_username}" BRIDGE_PASSWORD="${bridge_password}"`, {
+        env: { ...process.env, RAILWAY_TOKEN }
+      });
+
+      // Redeploy
+      await execAsync(`railway deploy ${projectFlag}`, {
+        env: { ...process.env, RAILWAY_TOKEN }
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('❌ Failed to apply Railway env/redeploy:', error);
+      res.status(500).json({ success: false, error: error?.message || 'Failed to apply Railway settings' });
     }
   }
 }
