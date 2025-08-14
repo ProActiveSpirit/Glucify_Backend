@@ -22,7 +22,4 @@ router.post('/bridge/apply', authenticateToken, DexcomController.applyBridgeEnvA
 // POST /api/dexcom/bridge/disconnect - Clear creds, mark disconnected, release domain, save status
 router.post('/bridge/disconnect', authenticateToken, DexcomController.disconnectBridge);
 
-// POST /api/dexcom/bridge/clear - Clear Railway env vars and redeploy (backend-only state)
-router.post('/bridge/clear', authenticateToken, DexcomController.clearBridgeEnvAndRedeploy);
-
 export default router;
