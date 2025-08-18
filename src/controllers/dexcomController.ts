@@ -305,6 +305,7 @@ export class DexcomController {
           if (resp.data?.errors) {
             throw new Error(resp.data.errors[0]?.message || 'Railway GraphQL error');
           }
+          console.log('🔄 Railway gql response:', resp.data.data);
           return resp.data?.data;
         } catch (err: any) {
           const msg = err?.response?.data?.errors?.[0]?.message || err?.message || 'Railway GraphQL request failed';
@@ -329,7 +330,7 @@ export class DexcomController {
       const environmentId: string | undefined = envEdges[0]?.node?.id;
       const svcEdges = project?.services?.edges || [];
       const svcNodes = svcEdges.map((e: any) => e?.node).filter(Boolean);
-      const serviceId: string | undefined = (svcNodes.length === 1 ? svcNodes[0]?.id : (svcNodes.find((s: any) => /nightscout/i.test(s?.name || ''))?.id)) || undefined;
+      const serviceId: string | undefined = (svcNodes.length === 1 ? svcNodes[0]?.id : (svcNodes.find((s: any) => /cgm-remote-monitor/i.test(s?.name || ''))?.id)) || undefined;
       if (!environmentId) throw new Error('No Railway environment found for project');
 
       // Upsert variables using Public API (can omit serviceId to create shared variables)
@@ -343,15 +344,15 @@ export class DexcomController {
         ...(serviceId ? { serviceId } : {}),
       });
       try {
-        await gql(upsertMutation, { input: mkInput('BRIDGE_USER_NAME', bridge_username) });
-        await gql(upsertMutation, { input: mkInput('BRIDGE_PASSWORD', bridge_password) });
+        await gql(upsertMutation, { input: mkInput('CONNECT_SHARE_ACCOUNT_NAME', bridge_username) });
+        await gql(upsertMutation, { input: mkInput('CONNECT_SHARE_PASSWORD', bridge_password) });
       } catch (err) {
         // If service-specific upsert fails, fallback to shared variables
         if (serviceId) {
           console.warn('Variable upsert with serviceId failed, falling back to shared variables');
           const mkShared = (name: string, value: string) => ({ projectId: railway_project_id, environmentId, name, value });
-          await gql(upsertMutation, { input: mkShared('BRIDGE_USER_NAME', bridge_username) });
-          await gql(upsertMutation, { input: mkShared('BRIDGE_PASSWORD', bridge_password) });
+          await gql(upsertMutation, { input: mkShared('CONNECT_SHARE_ACCOUNT_NAME', bridge_username) });
+          await gql(upsertMutation, { input: mkShared('CONNECT_SHARE_PASSWORD', bridge_password) });
         } else {
           throw err;
         }
@@ -446,7 +447,7 @@ export class DexcomController {
       const environmentId: string | undefined = envEdges[0]?.node?.id;
       const svcEdges = project?.services?.edges || [];
       const svcNodes = svcEdges.map((e: any) => e?.node).filter(Boolean);
-      const serviceId: string | undefined = (svcNodes.length === 1 ? svcNodes[0]?.id : (svcNodes.find((s: any) => /nightscout/i.test(s?.name || ''))?.id)) || undefined;
+      const serviceId: string | undefined = (svcNodes.length === 1 ? svcNodes[0]?.id : (svcNodes.find((s: any) => /cgm-remote-monitor/i.test(s?.name || ''))?.id)) || undefined;
       if (!environmentId) {
         res.status(400).json({ success: false, error: 'No Railway environment found for project' });
         return;
@@ -466,8 +467,8 @@ export class DexcomController {
         }
       };
 
-      await deleteOrClear('BRIDGE_USER_NAME');
-      await deleteOrClear('BRIDGE_PASSWORD');
+      await deleteOrClear('CONNECT_SHARE_ACCOUNT_NAME');
+      await deleteOrClear('CONNECT_SHARE_PASSWORD');
 
       // Optionally restart latest deployment
       if (serviceId) {
