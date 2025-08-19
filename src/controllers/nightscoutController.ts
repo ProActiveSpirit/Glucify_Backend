@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import axios from 'axios';
+import { supabase } from '../config/database';
 
 export class NightscoutController {
   static async fetchProfile(req: Request, res: Response): Promise<void> {
@@ -71,6 +72,64 @@ export class NightscoutController {
     }
   }
   
+  static async fetchData(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+
+      const { data: conn, error: connErr } = await supabase
+        .from('user_nightscout_connections')
+        .select('nightscout_domain_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (connErr || !conn?.nightscout_domain_id) {
+        res.json({ success: true, data: { url: null, entries: [], treatments: [], profile: null } });
+        return;
+      }
+      const domainId = (conn as any).nightscout_domain_id;
+
+      const { data: domainRow, error: domErr } = await supabase
+        .from('nightscout_domains')
+        .select('domain')
+        .eq('id', domainId)
+        .maybeSingle();
+
+      if (domErr || !domainRow?.domain) {
+        res.json({ success: true, data: { url: null, entries: [], treatments: [], profile: null } });
+        return;
+      }
+
+      const baseUrl = domainRow.domain.startsWith('http')
+        ? domainRow.domain.replace(/\/$/, '')
+        : `https://${domainRow.domain}`.replace(/\/$/, '');
+
+      const now = new Date();
+      const fromDateISO = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+      const [entriesResp, treatmentsResp, profileResp] = await Promise.all([
+        axios.get(`${baseUrl}/api/v1/entries.json?count=288`),
+        axios.get(`${baseUrl}/api/v1/treatments.json`, { params: { 'find[created_at][$gte]': fromDateISO } }),
+        axios.get(`${baseUrl}/api/v1/profile.json`),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          url: baseUrl,
+          entries: entriesResp.data || [],
+          treatments: treatmentsResp.data || [],
+          profile: Array.isArray(profileResp.data) ? profileResp.data[0] : profileResp.data,
+        },
+      });
+    } catch (error: any) {
+      // Return empty dataset to avoid frontend hard failures when Nightscout is unreachable
+      res.json({ success: true, data: { url: null, entries: [], treatments: [], profile: null } });
+    }
+  }
   
 }
 
