@@ -20,10 +20,10 @@ interface DexcomRefreshRequest {
 
 export class DexcomController {
   private static getDexcomBaseUrl(): string {
-    // Use sandbox for development, production for production
-    return process.env['NODE_ENV'] === 'production'
-      ? 'https://api.dexcom.com'
-      : 'https://sandbox-api.dexcom.com';
+    // Allow override via env; default to production per request
+    const env = process.env['DEXCOM_ENV'] || process.env['NODE_ENV'] || 'production';
+    console.log('🔄 Dexcom environment:', env);
+    return env === 'sandbox' ? 'https://sandbox-api.dexcom.com' : 'https://api.dexcom.com';
   }
 
   static async exchangeToken(req: Request, res: Response): Promise<void> {
