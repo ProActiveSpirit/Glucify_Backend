@@ -32,17 +32,36 @@ export interface FoodAnalysisResult {
   mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
 }
 
+type AllowedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
 export class FoodAnalysisService {
-  static async analyzeFoodImage(imageData: string, userId?: string): Promise<FoodAnalysisResult> {
+  static async analyzeFoodImage(imageData: string, userId?: string, mediaType?: string): Promise<FoodAnalysisResult> {
     try {
       console.log('Starting food analysis with Claude API...');
       
       // Handle different image data formats
       let base64Image: string;
-      
+      let imageMediaType: AllowedMediaType = 'image/jpeg';
+      let detectedMime: string | undefined = undefined;
+
       if (imageData.startsWith('data:image/')) {
         // Already a base64 data URL
-        base64Image = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
+        const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+        if (match) {
+          const providedType: string = match[1] ? String(match[1]) : 'image/jpeg';
+          base64Image = match[2] ? String(match[2]) : '';
+          const allowed: AllowedMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+          const candidateType: string = (typeof mediaType === 'string' && mediaType.length > 0) ? mediaType : providedType;
+          detectedMime = candidateType;
+          if ((allowed as readonly string[]).includes(candidateType)) {
+            imageMediaType = candidateType as AllowedMediaType;
+          } else {
+            // Default for unsupported types (e.g., HEIC) to jpeg and let Claude try
+            imageMediaType = 'image/jpeg';
+          }
+        } else {
+          base64Image = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
+        }
       } else if (imageData.startsWith('file://')) {
         // File URI - we'll need to read the file
         // For now, we'll throw an error and suggest using base64
@@ -50,6 +69,47 @@ export class FoodAnalysisService {
       } else {
         // Assume it's already base64 without the data URL prefix
         base64Image = imageData;
+      }
+
+      // Robust detection using decoded bytes to ensure media type matches content
+      try {
+        const buffer = Buffer.from(base64Image, 'base64');
+        const headerAscii = buffer.subarray(0, 64).toString('ascii');
+        const isJpeg = buffer.length > 2 && buffer[0] === 0xFF && buffer[1] === 0xD8;
+        const isPng = buffer.length > 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+        const isGif = headerAscii.startsWith('GIF87a') || headerAscii.startsWith('GIF89a');
+        const isWebp = headerAscii.startsWith('RIFF') && headerAscii.includes('WEBP');
+        const isHeic = headerAscii.includes('ftypheic') || headerAscii.includes('ftypheix') || headerAscii.includes('ftyphevc') || headerAscii.includes('ftypheif');
+
+        if (isJpeg) {
+          imageMediaType = 'image/jpeg';
+        } else if (isPng) {
+          imageMediaType = 'image/png';
+        } else if (isGif) {
+          imageMediaType = 'image/gif';
+        } else if (isWebp) {
+          imageMediaType = 'image/webp';
+        } else if (isHeic) {
+          detectedMime = 'image/heic';
+        }
+      } catch (_e) {
+        // ignore header detection errors
+      }
+
+      // If detected HEIC/HEIF or any unsupported type, attempt to transcode to JPEG
+      const allowedSet = new Set<AllowedMediaType>(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+      if ((detectedMime && !allowedSet.has(detectedMime as AllowedMediaType)) || !allowedSet.has(imageMediaType)) {
+        try {
+          const sharp = await import('sharp');
+          const inputBuffer = Buffer.from(base64Image, 'base64');
+          const jpegBuffer = await sharp.default(inputBuffer).jpeg({ quality: 85 }).toBuffer();
+          base64Image = jpegBuffer.toString('base64');
+          imageMediaType = 'image/jpeg';
+          console.log('Transcoded image to JPEG for unsupported format:', detectedMime || 'unknown');
+        } catch (transcodeError) {
+          console.warn('Image transcode not available, proceeding with default JPEG claim. Consider installing sharp.', transcodeError);
+          // Proceed; Anthropic may still reject if mismatch persists
+        }
       }
 
       // console.log('Base64 image:', base64Image);
@@ -136,7 +196,7 @@ Analyze the provided food image and return the JSON response.`;
                 type: 'image',
                 source: {
                   type: 'base64',
-                  media_type: 'image/jpeg',
+                  media_type: imageMediaType,
                   data: base64Image
                 }
               }

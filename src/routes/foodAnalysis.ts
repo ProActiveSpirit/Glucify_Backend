@@ -3,7 +3,7 @@ import { FoodAnalysisService } from '../services/foodAnalysisService';
 
 const router = express.Router();
 
-// Middleware to handle base64 image data
+// Middleware to handle base64 image data and capture media type
 const parseImageData = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
   try {
     const { imageData } = req.body;
@@ -16,8 +16,22 @@ const parseImageData = (req: express.Request, res: express.Response, next: expre
       return;
     }
 
-    // Remove data URL prefix if present
-    const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
+    let base64Data: string = imageData;
+    let mediaType: string | undefined;
+
+    // If data URL is provided, extract media type and base64 payload
+    if (typeof imageData === 'string' && imageData.startsWith('data:image/')) {
+      const match = imageData.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+      if (!match || !match[2]) {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid data URL for image'
+        });
+        return;
+      }
+      mediaType = match[1];
+      base64Data = match[2];
+    }
     
     // Validate base64 format
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Data)) {
@@ -29,6 +43,7 @@ const parseImageData = (req: express.Request, res: express.Response, next: expre
     }
 
     req.body.processedImageData = base64Data;
+    req.body.mediaType = mediaType; // optional; service can auto-detect if missing
     next();
   } catch (error) {
     console.error('Error parsing image data:', error);
@@ -42,12 +57,12 @@ const parseImageData = (req: express.Request, res: express.Response, next: expre
 // Analyze food image
 router.post('/analyze', parseImageData, async (req: express.Request, res: express.Response) => {
   try {
-    const { processedImageData } = req.body;
+    const { processedImageData, mediaType } = req.body as { processedImageData: string; mediaType?: string };
     const userId = req.headers['user-id'] as string; // Optional user ID for logging
 
     console.log('Received food analysis request');
 
-    const analysisResult = await FoodAnalysisService.analyzeFoodImage(processedImageData, userId);
+    const analysisResult = await FoodAnalysisService.analyzeFoodImage(processedImageData, userId, mediaType);
 
     res.json({
       success: true,
