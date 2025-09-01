@@ -38,7 +38,7 @@ CURRENT CONTEXT:
 - Profile: ${userProfile ? `Type ${userProfile.diabetesType}, I:C ratio ${userProfile.insulinToCarbRatio}` : 'Not available'}${foodContext}${mealPlanContext}`;
       }
 
-      const systemPrompt = `You are Michelle, a diabetes management AI assistant. Your goals:
+      const systemPrompt = `You are Glucy, a diabetes management AI assistant. Your goals:
 - Provide personalized diabetes management guidance
 - Automatically extract and log health data from conversations
 - Offer evidence-based recommendations while prioritizing safety
@@ -95,7 +95,7 @@ COMMUNICATION:
 
 ${contextString}
 
-Respond as Michelle with personalized, contextual guidance while prioritizing safety and directing users to the Meals tab for comprehensive meal planning.`;
+Respond as Glucy with personalized, contextual guidance while prioritizing safety and directing users to the Meals tab for comprehensive meal planning.`;
 
       const message = await anthropic.messages.create({
         model: 'claude-3-5-sonnet-20241022',
