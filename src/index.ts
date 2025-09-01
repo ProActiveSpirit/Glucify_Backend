@@ -30,7 +30,7 @@ app.use(helmet());
 
 // CORS configuration - Enhanced for development and production
 const allowedOrigins = process.env['ALLOWED_ORIGINS']?.split(',') || [
-  'http://localhost:3000',
+  'http://localhost:3001',
   'http://localhost:8081',
   'http://localhost:19000',
   'http://localhost:19006',
@@ -81,7 +81,9 @@ const corsOptions = {
     'X-Requested-With',
     'Accept',
     'Origin',
-    'user-id'
+    'user-id',
+    'X-App-Platform',
+    'X-Client'
   ],
   optionsSuccessStatus: 200
 };
