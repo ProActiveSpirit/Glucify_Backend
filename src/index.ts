@@ -18,6 +18,7 @@ import dexcomRoutes from './routes/dexcom';
 import paymentRoutes from './routes/payment';
 import trialRoutes from './routes/trial';
 import nightscoutRoutes from './routes/nightscout';
+import learningRoutes from './routes/learning';
 
 // Import middleware
 // Note: authenticateToken is used in route files
@@ -132,6 +133,7 @@ app.use('/api/dexcom', dexcomRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/trial', trialRoutes);
 app.use('/api/nightscout', nightscoutRoutes);
+app.use('/api/learning', learningRoutes);
 
 // Global error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
